@@ -21,9 +21,9 @@ def create_text_overlay(width: int, height: int, title: str, footer: str, output
     draw = ImageDraw.Draw(img)
     
     try:
-        # Try to use a nice font
-        title_font = ImageFont.truetype("/System/Library/Fonts/Arial.ttc", int(height * 0.06))
-        footer_font = ImageFont.truetype("/System/Library/Fonts/Arial.ttc", int(height * 0.03))
+        # Try to use a nice font - EVEN BIGGER text
+        title_font = ImageFont.truetype("/System/Library/Fonts/Arial.ttc", int(height * 0.16))  # Even bigger
+        footer_font = ImageFont.truetype("/System/Library/Fonts/Arial.ttc", int(height * 0.08))  # Even bigger
     except:
         # Fallback to default font
         title_font = ImageFont.load_default()
@@ -46,8 +46,8 @@ def create_text_overlay(width: int, height: int, title: str, footer: str, output
     footer_x = 40
     footer_y = height - footer_height - 40
     
-    # Draw text with stroke (outline)
-    stroke_width = 3
+    # Draw text with stroke (outline) - bigger stroke for larger text
+    stroke_width = 5
     
     # Draw title with stroke
     for dx in range(-stroke_width, stroke_width + 1):
@@ -85,12 +85,52 @@ def composite_video(background_path: Path, face_image_path: Path, title: str, fo
         # Default to 1080p if ffprobe fails
         width, height = 1920, 1080
     
-    # Process face image
+    # Process face image with background removal
     face_img = Image.open(face_image_path)
-    face_img = face_img.convert('L').convert('RGB')  # Convert to grayscale
+    face_img = face_img.convert('RGBA')  # Keep alpha channel for transparency
+    
+    # Better background removal with smoother edges
+    import numpy as np
+    img_array = np.array(face_img)
+    
+    # More aggressive background removal for light backgrounds
+    # Check for very light pixels (white/very light gray)
+    very_light_mask = (img_array[:, :, 0] > 240) & (img_array[:, :, 1] > 240) & (img_array[:, :, 2] > 240)
+    
+    # Check for light gray backgrounds
+    light_mask = (img_array[:, :, 0] > 200) & (img_array[:, :, 1] > 200) & (img_array[:, :, 2] > 200)
+    
+    # Check for medium gray backgrounds  
+    medium_gray_mask = (
+        (img_array[:, :, 0] > 180) & (img_array[:, :, 0] < 220) &
+        (img_array[:, :, 1] > 180) & (img_array[:, :, 1] < 220) &
+        (img_array[:, :, 2] > 180) & (img_array[:, :, 2] < 220)
+    )
+    
+    # Combine all background masks
+    background_mask = very_light_mask | light_mask | medium_gray_mask
+    
+    # Apply a small blur to the mask to smooth edges
+    from scipy import ndimage
+    background_mask = ndimage.binary_dilation(background_mask, iterations=1)
+    
+    # Make background transparent
+    img_array[background_mask, 3] = 0  # Set alpha to 0 for background
+    
+    # Convert back to PIL Image
+    face_img = Image.fromarray(img_array)
+    
+    # Convert to grayscale while preserving alpha
+    # Split channels
+    r, g, b, a = face_img.split()
+    # Convert RGB to grayscale
+    gray = r.convert('L')
+    # Merge back with alpha
+    face_img = Image.merge('LA', (gray, a))
+    face_img = face_img.convert('RGBA')  # Convert back to RGBA for consistency
     
     # Resize face to appropriate size
-    face_size = int(width * 0.25)
+    face_size = int(width * 0.3)  # Made slightly bigger too
     face_img = face_img.resize((face_size, face_size), Image.Resampling.LANCZOS)
     
     # Create face overlay with transparent background
@@ -140,19 +180,13 @@ def composite_video(background_path: Path, face_image_path: Path, title: str, fo
                 os.remove(temp_file)
 
 @app.command()
-def main(
-    title: str = typer.Option(..., help="Main title text"),
-    footer: str = typer.Option(..., help="Footer handle or link (e.g., '@user / site.com')"),
-    reference_image: Path = typer.Option(..., help="Reference face image path"),
+def generate_background(
     api_key: str = typer.Option(None, "--api-key", "-k", help="fal.ai API key"),
-    duration: int = typer.Option(8, help="Video duration in seconds (only 8s supported)"),
-    output_path: Path = typer.Option("intro.mp4", help="Path to save output video"),
+    output_path: Path = typer.Option("cache/background.mp4", help="Path to save background video"),
 ):
-    """
-    Generate a cinematic YouTube intro with custom face and text
-    """
+    """Generate and cache the background video (one-time setup)."""
     key = get_api_key(api_key)
-
+    
     # Create clean background animation (no text, no faces)
     video_prompt = """
     Create a cinematic noir-style spacetime animation in black and white, Twilight Zone aesthetic:
@@ -167,8 +201,7 @@ def main(
     IMPORTANT: NO TEXT, NO FACES, NO PEOPLE - just pure abstract spacetime geometry.
     Clean background suitable for compositing text and images later.
     """
-
-    # Prepare the API request (no reference image needed for background)
+    
     payload = {
         "prompt": video_prompt.strip(),
         "duration": "8s",
@@ -176,22 +209,16 @@ def main(
         "resolution": "1080p",
         "generate_audio": True
     }
-
+    
+    typer.echo("🎬 Generating background video...")
     headers = {"Authorization": f"Key {key}"}
-    response = requests.post(
-        "https://fal.run/fal-ai/veo3",
-        json=payload,
-        headers=headers
-    )
-
+    response = requests.post("https://fal.run/fal-ai/veo3", json=payload, headers=headers)
+    
     if response.status_code != 200:
         typer.echo(f"Error: {response.status_code}\n{response.text}")
         raise typer.Exit(1)
-
-    result = response.json()
-    typer.echo(f"API Response: {result}")
     
-    # Extract video URL from response
+    result = response.json()
     video_url = result.get("video", {}).get("url") or result.get("video_url")
     
     if not video_url:
@@ -199,24 +226,41 @@ def main(
         raise typer.Exit(1)
     
     typer.echo(f"Video generated: {video_url}")
-
-    # Download the video
     typer.echo("Downloading video...")
     video_response = requests.get(video_url)
+    
     if video_response.status_code != 200:
         typer.echo(f"Failed to download video: {video_response.status_code}")
         raise typer.Exit(1)
     
-    # Save background video
-    background_path = output_path.parent / "background_only.mp4"
-    background_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(background_path, "wb") as f:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_path, "wb") as f:
         f.write(video_response.content)
-    typer.echo(f"Background video saved to {background_path}")
+    typer.echo(f"✅ Background video cached to {output_path}")
+
+@app.command()
+def main(
+    title: str = typer.Option(..., help="Main title text"),
+    footer: str = typer.Option(..., help="Footer handle or link (e.g., '@user / site.com')"),
+    reference_image: Path = typer.Option(..., help="Reference face image path"),
+    background_video: Path = typer.Option("cache/background.mp4", help="Path to cached background video"),
+    output_path: Path = typer.Option("intro.mp4", help="Path to save output video"),
+):
+    """
+    Generate a cinematic YouTube intro with custom face and text using cached background
+    """
+    
+    # Check if background video exists
+    if not background_video.exists():
+        typer.echo(f"❌ Background video not found at {background_video}")
+        typer.echo("Run: python cli.py generate-background")
+        raise typer.Exit(1)
+    
+    typer.echo(f"📹 Using cached background: {background_video}")
     
     # Composite text and face locally
     typer.echo("🎬 Compositing text and face locally...")
-    composite_video(background_path, reference_image, title, footer, output_path)
+    composite_video(background_video, reference_image, title, footer, output_path)
     typer.echo(f"✅ Final intro saved to {output_path}")
 
 if __name__ == "__main__":

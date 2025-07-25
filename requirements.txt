@@ -3,3 +3,5 @@ requests
 python-dotenv
 manim
 pillow
+numpy
+scipy
