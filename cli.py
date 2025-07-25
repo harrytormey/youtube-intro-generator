@@ -149,8 +149,8 @@ def composite_video(background_path: Path, face_image_path: Path, title: str, fo
         f"""
         [1:v]fade=t=in:st=4:d=0.5:alpha=1,fade=t=out:st=5.5:d=0.5:alpha=1[face];
         [0:v][face]overlay=0:0[bg_face];
-        [bg_face]drawtext=text='{title}':fontfile=/System/Library/Fonts/Arial.ttc:fontsize={int(height*0.08)}:fontcolor=white:borderw={int(height*0.004)}:bordercolor=black:x=(w-text_w)/2:y=(h-text_h)/2:enable='between(t,6,8)'[with_title];
-        [with_title]drawtext=text='{footer}':fontfile=/System/Library/Fonts/Arial.ttc:fontsize={int(height*0.04)}:fontcolor=white:borderw={int(height*0.002)}:bordercolor=black:x=40:y=h-text_h-40:enable='between(t,6.5,8)'[final]
+        [bg_face]drawtext=text='{title}':fontfile=/System/Library/Fonts/Arial.ttc:fontsize={int(height*0.05)}:fontcolor=white:borderw={int(height*0.0025)}:bordercolor=black:x=(w-text_w)/2:y=(h-text_h)/2:enable='between(t,6,8)'[with_title];
+        [with_title]drawtext=text='{footer}':fontfile=/System/Library/Fonts/Arial.ttc:fontsize={int(height*0.03)}:fontcolor=white:borderw={int(height*0.0015)}:bordercolor=black:x=40:y=h-text_h-40:enable='between(t,6.5,8)'[final]
         """,
         '-map', '[final]',
         '-map', '0:a',  # Keep original audio
