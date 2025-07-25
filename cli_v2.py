@@ -50,16 +50,16 @@ def generate_background(
     key = get_api_key(api_key)
     
     video_prompt = f"""
-    Create a cinematic noir-style YouTube intro sequence in black and white, Twilight Zone aesthetic:
+    Create a cinematic noir-style YouTube intro background in black and white, Twilight Zone aesthetic:
     
     0-2s: Fade in from black. A warped 3D spacetime grid oscillates over a starfield.
-    2-3s: Code text appears clearly: "simulate_spacetime_geometry(mass=1.5e30)"
-    3-5s: The grid begins collapsing inward, forming a stylized black hole with swirling matter.
-    5-7s: The black hole grows larger, warping space around it dramatically.
-    7-8s: Clear title text appears: "{title}". Bottom-left footer: "{footer}"
+    2-4s: The grid begins warping and collapsing inward, creating spacetime distortion.
+    4-6s: A stylized black hole forms at the center, warping the grid dramatically.
+    6-8s: The black hole stabilizes with swirling cosmic matter around it.
     
     Style: black and white, Twilight Zone, noir, cinematic, minimal, eerie ambient atmosphere.
-    No faces, no people, just abstract space and text elements.
+    NO TEXT, NO FACES, NO PEOPLE - just pure abstract spacetime geometry and cosmic elements.
+    Clean background suitable for overlaying text and faces later.
     """
     
     payload = {
@@ -92,15 +92,20 @@ def create_text_overlay(
     key = get_api_key(api_key)
     
     text_prompt = f"""
-    Create a clean text overlay for a YouTube intro on transparent background:
+    Create a clean text overlay for a YouTube intro with multiple text elements:
     
-    Main title (large, bold, cinematic font): "{title}"
-    Footer text (smaller, bottom-left): "{footer}"
+    1. Code text (medium size, monospace font): "simulate_spacetime_geometry(mass=1.5e30)"
+    2. Main title (large, bold, cinematic font): "{title}"  
+    3. Footer text (smaller, bottom-left): "{footer}"
     
-    Style: Modern, readable, high contrast white text with subtle shadow.
-    Background: Transparent or black.
-    Layout: Title centered, footer bottom-left corner.
-    Typography: Clean, professional, sci-fi inspired.
+    Layout: 
+    - Code text appears first, positioned upper-center
+    - Main title appears centered
+    - Footer text positioned bottom-left corner
+    
+    Style: High contrast white text with subtle shadow/glow effects.
+    Background: Transparent or solid black for easy compositing.
+    Typography: Clean, professional, sci-fi inspired. Monospace for code, cinematic for title.
     """
     
     payload = {

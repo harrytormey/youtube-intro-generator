@@ -1,81 +1,72 @@
 from manim import *
-import cv2
-import numpy as np
+from pathlib import Path
 
 class CompositeIntro(Scene):
     def construct(self):
-        """Composite the generated elements into a final intro."""
+        """Show how to composite the generated elements."""
         
-        # Load the generated components (you'll need to update paths)
-        background_video_path = "output/background.mp4"
-        face_overlay_path = "output/face_overlay.png"
-        text_overlay_path = "output/text_overlay.png"
+        # Instructions for user
+        title = Text("YouTube Intro Composition", font_size=36, color=WHITE)
+        title.to_edge(UP)
         
-        # Create placeholders if files don't exist
-        try:
-            # Background
-            background = Rectangle(width=16, height=9, color=BLACK, fill_opacity=1)
-            background.set_stroke(WHITE, width=1)
-            
-            # Face overlay (load from generated image)
-            face_overlay = ImageMobject(face_overlay_path) if Path(face_overlay_path).exists() else Circle(color=WHITE)
-            face_overlay.scale(0.5)
-            face_overlay.move_to(ORIGIN)
-            
-            # Text overlay (load from generated image) 
-            text_overlay = ImageMobject(text_overlay_path) if Path(text_overlay_path).exists() else Text("Generated Text", color=WHITE)
-            text_overlay.scale(0.8)
-            
-            # Animation sequence
-            self.add(background)
-            
-            # Fade in background
-            self.play(FadeIn(background), run_time=1)
-            self.wait(1)
-            
-            # Add spacetime grid effect
-            grid = NumberPlane(
-                x_range=(-8, 8, 1),
-                y_range=(-4.5, 4.5, 1),
-                background_line_style={
-                    "stroke_color": BLUE,
-                    "stroke_width": 1,
-                    "stroke_opacity": 0.3
-                }
+        instructions = VGroup(
+            Text("Your generated components:", font_size=24, color=YELLOW),
+            Text("1. output/background.mp4 - Clean spacetime animation", font_size=18, color=WHITE),
+            Text("2. output/text_overlay.png - Title and code text", font_size=18, color=WHITE), 
+            Text("3. output/face_overlay.png - Space scene template", font_size=18, color=WHITE),
+            Text("4. Your face-swapped version (manual step)", font_size=18, color=WHITE),
+        ).arrange(DOWN, aligned_edge=LEFT, buff=0.3)
+        
+        instructions.move_to(ORIGIN + UP)
+        
+        composition_steps = VGroup(
+            Text("Composition steps:", font_size=24, color=YELLOW),
+            Text("1. Layer background.mp4 as base", font_size=18, color=WHITE),
+            Text("2. Add face overlay at 3-7 seconds", font_size=18, color=WHITE),
+            Text("3. Add text overlay with timing:", font_size=18, color=WHITE),
+            Text("   • Code text: 2-3s", font_size=16, color=GRAY),
+            Text("   • Title + footer: 7-8s", font_size=16, color=GRAY),
+            Text("4. Export as final intro video", font_size=18, color=WHITE),
+        ).arrange(DOWN, aligned_edge=LEFT, buff=0.2)
+        
+        composition_steps.move_to(ORIGIN + DOWN*1.5)
+        
+        # Animation
+        self.play(Write(title))
+        self.wait(1)
+        self.play(FadeIn(instructions), run_time=2)
+        self.wait(2)
+        self.play(FadeIn(composition_steps), run_time=2)
+        self.wait(3)
+        
+        # Show a simple timeline
+        timeline = Rectangle(width=10, height=0.5, color=WHITE)
+        timeline.move_to(ORIGIN + DOWN*3)
+        
+        markers = VGroup()
+        labels = VGroup()
+        
+        # Timeline markers
+        for i, (time, label, color) in enumerate([
+            (0, "0s", WHITE),
+            (2.5, "2s: Code", YELLOW), 
+            (4, "4s: Face", GREEN),
+            (7.5, "7s: Title", BLUE),
+            (10, "8s", WHITE)
+        ]):
+            x_pos = timeline.get_left()[0] + (time/8) * timeline.width
+            marker = Line(
+                start=[x_pos, timeline.get_top()[1], 0],
+                end=[x_pos, timeline.get_bottom()[1] - 0.2, 0],
+                color=color
             )
+            text = Text(label, font_size=12, color=color)
+            text.next_to(marker, DOWN, buff=0.1)
             
-            self.play(Create(grid), run_time=2)
-            
-            # Warp the grid (black hole effect)
-            def warp_function(point):
-                x, y, z = point
-                distance = np.sqrt(x**2 + y**2)
-                if distance > 0:
-                    warp_factor = 1 / (1 + distance/2)
-                    return np.array([x * warp_factor, y * warp_factor, z])
-                return point
-            
-            self.play(
-                grid.animate.apply_function(warp_function),
-                run_time=3,
-                rate_func=smooth
-            )
-            
-            # Add face emerging from center
-            self.play(FadeIn(face_overlay), run_time=1.5)
-            
-            # Add text overlay
-            self.play(Write(text_overlay), run_time=1.5)
-            
-            # Final hold
-            self.wait(1)
-            
-        except Exception as e:
-            # Fallback animation if files not found
-            title = Text("YouTube Intro", font_size=48, color=WHITE)
-            subtitle = Text("Generated with fal.ai", font_size=24, color=GRAY)
-            subtitle.next_to(title, DOWN)
-            
-            self.play(Write(title), run_time=2)
-            self.play(Write(subtitle), run_time=1)
-            self.wait(2)
+            markers.add(marker)
+            labels.add(text)
+        
+        self.play(Create(timeline))
+        self.play(Create(markers), Write(labels))
+        
+        self.wait(3)
