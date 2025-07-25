@@ -21,9 +21,9 @@ def create_text_overlay(width: int, height: int, title: str, footer: str, output
     draw = ImageDraw.Draw(img)
     
     try:
-        # Try to use a nice font - ENORMOUS text
-        title_font = ImageFont.truetype("/System/Library/Fonts/Arial.ttc", int(height * 0.45))  # MASSIVE
-        footer_font = ImageFont.truetype("/System/Library/Fonts/Arial.ttc", int(height * 0.22))  # HUGE
+        # Try to use a nice font - ABSOLUTELY GIGANTIC text
+        title_font = ImageFont.truetype("/System/Library/Fonts/Arial.ttc", int(height * 0.8))  # 200% BIGGER
+        footer_font = ImageFont.truetype("/System/Library/Fonts/Arial.ttc", int(height * 0.4))  # 200% BIGGER
     except:
         # Fallback to default font
         title_font = ImageFont.load_default()
@@ -46,22 +46,23 @@ def create_text_overlay(width: int, height: int, title: str, footer: str, output
     footer_x = 40
     footer_y = height - footer_height - 40
     
-    # Draw text with stroke (outline) - enormous stroke for massive text
-    stroke_width = 12
+    # Draw text with stroke (outline) - massive stroke for gigantic text
+    stroke_width = 18
     
-    # Draw title with stroke
+    # Draw title with massive white stroke on transparent background
+    # Use white stroke instead of black to avoid black background effect
     for dx in range(-stroke_width, stroke_width + 1):
         for dy in range(-stroke_width, stroke_width + 1):
             if dx != 0 or dy != 0:
-                draw.text((title_x + dx, title_y + dy), title, font=title_font, fill=(0, 0, 0, 255))
-    draw.text((title_x, title_y), title, font=title_font, fill=(255, 255, 255, 255))
+                draw.text((title_x + dx, title_y + dy), title, font=title_font, fill=(255, 255, 255, 200))  # White stroke
+    draw.text((title_x, title_y), title, font=title_font, fill=(255, 255, 255, 255))  # Bright white text
     
-    # Draw footer with stroke
+    # Draw footer with massive white stroke
     for dx in range(-stroke_width, stroke_width + 1):
         for dy in range(-stroke_width, stroke_width + 1):
             if dx != 0 or dy != 0:
-                draw.text((footer_x + dx, footer_y + dy), footer, font=footer_font, fill=(0, 0, 0, 255))
-    draw.text((footer_x, footer_y), footer, font=footer_font, fill=(255, 255, 255, 255))
+                draw.text((footer_x + dx, footer_y + dy), footer, font=footer_font, fill=(255, 255, 255, 200))  # White stroke
+    draw.text((footer_x, footer_y), footer, font=footer_font, fill=(255, 255, 255, 255))  # Bright white text
     
     img.save(output_path)
 
@@ -134,25 +135,22 @@ def composite_video(background_path: Path, face_image_path: Path, title: str, fo
     face_y = (height - face_size) // 2
     face_overlay.paste(face_img, (face_x, face_y))
     
-    # Save processed images
+    # Save face overlay
     face_overlay_path = "temp_face_overlay.png"
-    text_overlay_path = "temp_text_overlay.png"
-    
     face_overlay.save(face_overlay_path)
-    create_text_overlay(width, height, title, footer, text_overlay_path)
     
-    # Use ffmpeg to composite everything
+    # Use ffmpeg to composite everything with DIRECT text rendering
+    # This bypasses PIL completely and uses FFmpeg's text filter
     cmd = [
         'ffmpeg', '-y',  # Overwrite output
         '-i', str(background_path),  # Background video
         '-loop', '1', '-i', face_overlay_path,  # Face overlay
-        '-loop', '1', '-i', text_overlay_path,  # Text overlay
         '-filter_complex',
         f"""
         [1:v]fade=t=in:st=4:d=0.5:alpha=1,fade=t=out:st=5.5:d=0.5:alpha=1[face];
-        [2:v]fade=t=in:st=6:d=0.3:alpha=1[text];
         [0:v][face]overlay=0:0[bg_face];
-        [bg_face][text]overlay=0:0[final]
+        [bg_face]drawtext=text='{title}':fontfile=/System/Library/Fonts/Arial.ttc:fontsize={int(height*0.08)}:fontcolor=white:borderw={int(height*0.004)}:bordercolor=black:x=(w-text_w)/2:y=(h-text_h)/2:enable='between(t,6,8)'[with_title];
+        [with_title]drawtext=text='{footer}':fontfile=/System/Library/Fonts/Arial.ttc:fontsize={int(height*0.04)}:fontcolor=white:borderw={int(height*0.002)}:bordercolor=black:x=40:y=h-text_h-40:enable='between(t,6.5,8)'[final]
         """,
         '-map', '[final]',
         '-map', '0:a',  # Keep original audio
@@ -170,9 +168,8 @@ def composite_video(background_path: Path, face_image_path: Path, title: str, fo
         raise
     finally:
         # Clean up temporary files
-        for temp_file in [face_overlay_path, text_overlay_path]:
-            if os.path.exists(temp_file):
-                os.remove(temp_file)
+        if os.path.exists(face_overlay_path):
+            os.remove(face_overlay_path)
 
 @app.command()
 def generate_background(
