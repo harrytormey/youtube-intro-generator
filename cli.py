@@ -21,9 +21,9 @@ def create_text_overlay(width: int, height: int, title: str, footer: str, output
     draw = ImageDraw.Draw(img)
     
     try:
-        # Try to use a nice font - EVEN BIGGER text
-        title_font = ImageFont.truetype("/System/Library/Fonts/Arial.ttc", int(height * 0.16))  # Even bigger
-        footer_font = ImageFont.truetype("/System/Library/Fonts/Arial.ttc", int(height * 0.08))  # Even bigger
+        # Try to use a nice font - ENORMOUS text
+        title_font = ImageFont.truetype("/System/Library/Fonts/Arial.ttc", int(height * 0.45))  # MASSIVE
+        footer_font = ImageFont.truetype("/System/Library/Fonts/Arial.ttc", int(height * 0.22))  # HUGE
     except:
         # Fallback to default font
         title_font = ImageFont.load_default()
@@ -46,8 +46,8 @@ def create_text_overlay(width: int, height: int, title: str, footer: str, output
     footer_x = 40
     footer_y = height - footer_height - 40
     
-    # Draw text with stroke (outline) - bigger stroke for larger text
-    stroke_width = 5
+    # Draw text with stroke (outline) - enormous stroke for massive text
+    stroke_width = 12
     
     # Draw title with stroke
     for dx in range(-stroke_width, stroke_width + 1):
@@ -93,29 +93,24 @@ def composite_video(background_path: Path, face_image_path: Path, title: str, fo
     import numpy as np
     img_array = np.array(face_img)
     
-    # More aggressive background removal for light backgrounds
-    # Check for very light pixels (white/very light gray)
-    very_light_mask = (img_array[:, :, 0] > 240) & (img_array[:, :, 1] > 240) & (img_array[:, :, 2] > 240)
+    # Completely new approach - simple but effective background removal
+    # Your image appears to be mostly grayscale already, so let's work with that
     
-    # Check for light gray backgrounds
-    light_mask = (img_array[:, :, 0] > 200) & (img_array[:, :, 1] > 200) & (img_array[:, :, 2] > 200)
+    # Convert to grayscale for processing but keep original for final output
+    gray_img = np.mean(img_array[:, :, :3], axis=2)
     
-    # Check for medium gray backgrounds  
-    medium_gray_mask = (
-        (img_array[:, :, 0] > 180) & (img_array[:, :, 0] < 220) &
-        (img_array[:, :, 1] > 180) & (img_array[:, :, 1] < 220) &
-        (img_array[:, :, 2] > 180) & (img_array[:, :, 2] < 220)
+    # Create a very conservative mask - only remove very light pixels
+    # Focus on pure white and very light gray only
+    background_mask = (
+        (img_array[:, :, 0] > 250) & 
+        (img_array[:, :, 1] > 250) & 
+        (img_array[:, :, 2] > 250)
     )
     
-    # Combine all background masks
-    background_mask = very_light_mask | light_mask | medium_gray_mask
+    # Don't over-process - just set background pixels to transparent
+    img_array[background_mask, 3] = 0
     
-    # Apply a small blur to the mask to smooth edges
-    from scipy import ndimage
-    background_mask = ndimage.binary_dilation(background_mask, iterations=1)
-    
-    # Make background transparent
-    img_array[background_mask, 3] = 0  # Set alpha to 0 for background
+    # Keep the rest of the image intact - no morphological operations that cause artifacts
     
     # Convert back to PIL Image
     face_img = Image.fromarray(img_array)
