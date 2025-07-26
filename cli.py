@@ -321,67 +321,43 @@ def combine(
         original_sample_rate = '44100'
         original_channels = 2
     
-    # FFmpeg command - simpler approach using demuxer instead of filters
-    intro_duration = 8.0  # Assuming 8-second intro
+    # Completely different approach - create one command that handles everything properly
+    intro_duration = 8.0
     
-    # Create temporary files for cleaner processing
-    temp_intro = "temp_intro_processed.mp4"
-    temp_main = "temp_main_processed.mp4"
-    
-    # Step 1: Process intro video to match main video specs
-    step1_cmd = [
-        'ffmpeg', '-y', '-i', str(intro_video),
-        '-vf', f'scale={width}:{height},fps={fps}',
-        '-c:v', 'libx264', '-c:a', 'copy',
-        '-t', str(intro_duration - transition_duration),  # Cut intro short for fade
-        temp_intro
-    ]
-    
-    # Step 2: Process main video to match specs  
-    step2_cmd = [
-        'ffmpeg', '-y', '-i', str(main_video),
-        '-vf', f'fps={fps}',
-        '-c:v', 'libx264', '-c:a', 'copy',
-        temp_main
-    ]
-    
-    # Step 3: Concatenate using demuxer (preserves exact timing)
-    concat_list = "concat_list.txt"
-    with open(concat_list, 'w') as f:
-        f.write(f"file '{temp_intro}'\n")
-        f.write(f"file '{temp_main}'\n")
-    
-    final_cmd = [
-        'ffmpeg', '-y', '-f', 'concat', '-safe', '0', '-i', concat_list,
-        '-c:v', 'libx264', '-c:a', 'copy',
+    cmd = [
+        'ffmpeg', '-y',
+        '-i', str(intro_video),   # Input 0: intro video
+        '-i', str(main_video),    # Input 1: main video  
+        '-filter_complex',
+        f'''
+        [0:v]scale={width}:{height}[intro_v];
+        [1:v]scale={width}:{height}[main_v];
+        [intro_v][main_v]concat=n=2:v=1:a=0[final_v];
+        [0:a]atrim=end={intro_duration}[intro_a];
+        [intro_a][1:a]concat=n=2:v=0:a=1[final_a]
+        ''',
+        '-map', '[final_v]',
+        '-map', '[final_a]',
+        '-c:v', 'libx264',
+        '-c:a', 'aac',
+        '-b:a', '192k',
+        '-ar', str(original_sample_rate),
+        '-ac', str(original_channels),
+        '-shortest',  # End when shortest stream ends
         '-movflags', '+faststart',
         '-pix_fmt', 'yuv420p',
         str(output_path)
     ]
     
     try:
-        # Execute all steps
-        typer.echo("⚙️  Step 1: Processing intro...")
-        subprocess.run(step1_cmd, check=True, capture_output=True)
-        
-        typer.echo("⚙️  Step 2: Processing main video...")
-        subprocess.run(step2_cmd, check=True, capture_output=True)
-        
-        typer.echo("⚙️  Step 3: Concatenating with perfect audio sync...")
-        subprocess.run(final_cmd, check=True, capture_output=True)
-        
-        
+        typer.echo("🔗 Combining videos with proper audio handling...")
+        subprocess.run(cmd, check=True, capture_output=True)
         typer.echo(f"✅ Combined video saved to {output_path}")
         typer.echo(f"📊 Output matches main video settings: {width}x{height} @ {fps:.1f}fps")
         
     except subprocess.CalledProcessError as e:
         typer.echo(f"❌ FFmpeg error: {e.stderr.decode()}")
         raise
-    finally:
-        # Clean up temp files
-        for temp_file in [temp_intro, temp_main, concat_list]:
-            if os.path.exists(temp_file):
-                os.remove(temp_file)
 
 if __name__ == "__main__":
     app()
