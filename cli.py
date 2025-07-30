@@ -66,6 +66,36 @@ def create_text_overlay(width: int, height: int, title: str, footer: str, output
     
     img.save(output_path)
 
+def wrap_text_for_ffmpeg(text: str, max_width: int = 50) -> list:
+    """Wrap text into multiple lines for FFmpeg drawtext, returning list of lines."""
+    words = text.split()
+    lines = []
+    current_line = []
+    current_length = 0
+    
+    for word in words:
+        # Calculate length including spaces between words
+        word_with_space = len(word) + (1 if current_line else 0)
+        
+        if current_length + word_with_space <= max_width:
+            current_line.append(word)
+            current_length += word_with_space
+        else:
+            # If we have words in current line, finish it and start new line
+            if current_line:
+                lines.append(' '.join(current_line))
+                current_line = [word]
+                current_length = len(word)
+            else:
+                # Single word is too long, just add it anyway
+                lines.append(word)
+                current_length = 0
+    
+    if current_line:
+        lines.append(' '.join(current_line))
+    
+    return lines
+
 def composite_video(background_path: Path, face_image_path: Path, title: str, footer: str, output_path: Path):
     """Composite text and face onto background video using ffmpeg."""
     
@@ -139,19 +169,77 @@ def composite_video(background_path: Path, face_image_path: Path, title: str, fo
     face_overlay_path = "temp_face_overlay.png"
     face_overlay.save(face_overlay_path)
     
-    # Use ffmpeg to composite everything with DIRECT text rendering
-    # This bypasses PIL completely and uses FFmpeg's text filter
+    # Wrap title text properly for multiple lines
+    def wrap_text(text, max_chars_per_line=40):
+        words = text.split()
+        lines = []
+        current_line = []
+        current_length = 0
+        
+        for word in words:
+            if current_length + len(word) + len(current_line) <= max_chars_per_line:
+                current_line.append(word)
+                current_length += len(word)
+            else:
+                if current_line:
+                    lines.append(' '.join(current_line))
+                current_line = [word]
+                current_length = len(word)
+        
+        if current_line:
+            lines.append(' '.join(current_line))
+        
+        return lines
+    
+    # Clean text for FFmpeg (remove problematic characters entirely)
+    def clean_for_ffmpeg(text):
+        return text.replace("'", "").replace(":", "")
+    
+    title_lines = wrap_text(title)
+    clean_title_lines = [clean_for_ffmpeg(line) for line in title_lines]
+    clean_footer = clean_for_ffmpeg(footer)
+    
+    # Calculate font sizes and positioning
+    title_fontsize = int(height * 0.04)
+    footer_fontsize = int(height * 0.03)
+    title_borderw = max(1, int(height * 0.002))
+    footer_borderw = max(1, int(height * 0.0015))
+    
+    # Build filter complex with proper multiline text support
+    filter_parts = []
+    filter_parts.append("[1:v]fade=t=in:st=4:d=0.5:alpha=1,fade=t=out:st=5.5:d=0.5:alpha=1[face]")
+    filter_parts.append("[0:v][face]overlay=0:0[bg_face]")
+    
+    # Add each line of title text
+    current_input = "bg_face"
+    line_height = title_fontsize + 10
+    total_height = len(clean_title_lines) * line_height
+    start_y = (height - total_height) // 2
+    
+    for i, line in enumerate(clean_title_lines):
+        y_pos = start_y + (i * line_height)
+        if i == len(clean_title_lines) - 1:
+            output_label = "with_title"
+        else:
+            output_label = f"title_{i}"
+        
+        filter_parts.append(
+            f"[{current_input}]drawtext=text='{line}':fontsize={title_fontsize}:fontcolor=white:borderw={title_borderw}:bordercolor=black:x=(w-text_w)/2:y={y_pos}:enable=between(t\\,6\\,8)[{output_label}]"
+        )
+        current_input = output_label
+    
+    # Add footer
+    filter_parts.append(
+        f"[with_title]drawtext=text='{clean_footer}':fontsize={footer_fontsize}:fontcolor=white:borderw={footer_borderw}:bordercolor=black:x=40:y=h-text_h-40:enable=between(t\\,6.5\\,8)[final]"
+    )
+    
+    filter_complex = ";".join(filter_parts)
+    
     cmd = [
         'ffmpeg', '-y',  # Overwrite output
         '-i', str(background_path),  # Background video
         '-loop', '1', '-i', face_overlay_path,  # Face overlay
-        '-filter_complex',
-        f"""
-        [1:v]fade=t=in:st=4:d=0.5:alpha=1,fade=t=out:st=5.5:d=0.5:alpha=1[face];
-        [0:v][face]overlay=0:0[bg_face];
-        [bg_face]drawtext=text='{title}':fontfile=/System/Library/Fonts/Arial.ttc:fontsize={int(height*0.05)}:fontcolor=white:borderw={int(height*0.0025)}:bordercolor=black:x=(w-text_w)/2:y=(h-text_h)/2:enable='between(t,6,8)'[with_title];
-        [with_title]drawtext=text='{footer}':fontfile=/System/Library/Fonts/Arial.ttc:fontsize={int(height*0.03)}:fontcolor=white:borderw={int(height*0.0015)}:bordercolor=black:x=40:y=h-text_h-40:enable='between(t,6.5,8)'[final]
-        """,
+        '-filter_complex', filter_complex,
         '-map', '[final]',
         '-map', '0:a',  # Keep original audio
         '-c:a', 'copy',  # Copy audio without re-encoding
